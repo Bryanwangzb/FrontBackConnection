@@ -13,6 +13,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.internal.GsonBuildConfig;
 
 import org.jetbrains.annotations.NotNull;
@@ -24,9 +25,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.internal.ws.RealWebSocket;
+import okhttp3.logging.HttpLoggingInterceptor;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -44,18 +47,40 @@ public class MainActivity extends AppCompatActivity {
 
 
         textViewResult = findViewById(R.id.text_view_result);
+
+        Gson gson = new GsonBuilder().serializeNulls().create();
+
+        HttpLoggingInterceptor loggingInterceptor = new HttpLoggingInterceptor();
+        loggingInterceptor.setLevel(HttpLoggingInterceptor.Level.BODY);
+
+        OkHttpClient okHttpClient = new OkHttpClient.Builder()
+                .addInterceptor(new Interceptor() {
+                    @NotNull
+                    @Override
+                    public okhttp3.Response intercept(@NotNull Chain chain) throws IOException {
+                        Request originalRequest = chain.request(); // we cannot change the original directly
+                        Request newRequest = originalRequest.newBuilder() // copy it and fix
+                                .header("Interceptor-Header", "xyz") //replace the former header
+                                .build();
+                        return chain.proceed(newRequest);
+                    }
+                })
+                .addInterceptor(loggingInterceptor)
+                .build();
+
         Retrofit retrofit = new Retrofit.Builder()
                 .baseUrl("https://jsonplaceholder.typicode.com/")
                 .addConverterFactory(GsonConverterFactory.create())
+                .client(okHttpClient)
                 .build();
 
         jsonPlaceHolderApi = retrofit.create(JsonPlaceHolderApi.class);
 
-        //getPosts();
+        getPosts();
         //getComments();
         //createPost();
         //updatePost();
-        deletePost();
+        //deletePost();
 
     }
 
@@ -170,7 +195,12 @@ public class MainActivity extends AppCompatActivity {
     private void updatePost() {
         Post post = new Post(12, null, "New Text");
 
-        Call<Post> call = jsonPlaceHolderApi.patchPost(5, post);
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Map-Header1", "def");
+        headers.put("Map-Header2", "ghi");
+
+
+        Call<Post> call = jsonPlaceHolderApi.patchPost(headers, 5, post);
         call.enqueue(new Callback<Post>() {
             @Override
             public void onResponse(Call<Post> call, Response<Post> response) {
@@ -189,8 +219,6 @@ public class MainActivity extends AppCompatActivity {
                 content += "Text" + postResponse.getText() + "\n\n";
 
                 textViewResult.setText(content);
-
-
             }
 
             @Override
